@@ -121,7 +121,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $uiSmoke = $uiSmokeJson | ConvertFrom-Json
-if (-not $uiSmoke.MinimizeToTrayState.NotifyVisible -or $uiSmoke.MinimizeToTrayState.ShowInTaskbar) {
+if (-not $uiSmoke.InitialShownState.FormVisible -or -not $uiSmoke.InitialShownState.ShowInTaskbar -or $uiSmoke.InitialShownState.WindowState -ne 'Normal') {
+    throw 'Initial GUI launch did not show the main window first.'
+}
+
+if (-not $uiSmoke.MinimizeToTrayState.NotifyVisible -or $uiSmoke.MinimizeToTrayState.ShowInTaskbar -or $uiSmoke.MinimizeToTrayState.WaitedMilliseconds -lt 5000) {
     throw 'Minimize-to-tray behavior did not produce the expected tray state.'
 }
 
@@ -129,8 +133,33 @@ if (-not $uiSmoke.RestoreState.FormVisible -or -not $uiSmoke.RestoreState.ShowIn
     throw 'Restore-from-tray behavior did not restore the form correctly.'
 }
 
-if (-not $uiSmoke.CloseToTrayState.Cancelled -or -not $uiSmoke.CloseToTrayState.NotifyVisible) {
+if (-not $uiSmoke.CloseInterceptState.Cancelled -or -not $uiSmoke.CloseInterceptState.NotifyVisible) {
     throw 'Close-to-tray behavior did not intercept the close request correctly.'
+}
+
+if (-not $uiSmoke.CloseToTrayStableState.NotifyVisible -or $uiSmoke.CloseToTrayStableState.ShowInTaskbar -or $uiSmoke.CloseToTrayStableState.WaitedMilliseconds -lt 5000) {
+    throw 'Tray process did not remain alive long enough after close-to-tray.'
+}
+
+Write-Host 'Running hidden VBS tray lifecycle smoke test...'
+$vbsUiMarkerPath = Join-Path $artifactsPath 'vbs-ui-smoke.json'
+if (Test-Path -LiteralPath $vbsUiMarkerPath) {
+    Remove-Item -LiteralPath $vbsUiMarkerPath -Force
+}
+
+& wscript.exe $vbsLauncherPath -SmokeTestUi -AllowNoAdminGui -WriteRuntimeMarkerPath $vbsUiMarkerPath
+$vbsUiMarker = Wait-ForArtifact -Path $vbsUiMarkerPath -TimeoutSeconds 40
+if (-not $vbsUiMarker.Success -or $vbsUiMarker.Mode -ne 'SmokeTestUi') {
+    throw 'Hidden VBS tray smoke test did not complete successfully.'
+}
+
+$vbsUi = $vbsUiMarker.Result
+if (-not $vbsUi.InitialShownState.FormVisible -or -not $vbsUi.InitialShownState.ShowInTaskbar) {
+    throw 'Hidden VBS launcher did not show the main window first.'
+}
+
+if (-not $vbsUi.CloseToTrayStableState.NotifyVisible -or $vbsUi.CloseToTrayStableState.WaitedMilliseconds -lt 5000) {
+    throw 'Hidden VBS launcher did not keep the tray process alive after close-to-tray.'
 }
 
 Write-Host 'Validation finished successfully.'

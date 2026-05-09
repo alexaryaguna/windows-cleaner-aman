@@ -230,6 +230,9 @@ Add-Type -AssemblyName System.Drawing
 $script:isAdministrator = Test-IsAdministrator
 $script:lastCleanupRun = $null
 $script:isExitRequested = $false
+$script:hasCompletedInitialShow = $false
+$script:smokeTestResult = $null
+$appContext = New-Object System.Windows.Forms.ApplicationContext
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows Cleaner Aman'
@@ -238,6 +241,7 @@ $form.Size = New-Object System.Drawing.Size(800, 575)
 $form.MinimumSize = New-Object System.Drawing.Size(800, 575)
 $form.MaximizeBox = $false
 $form.ShowInTaskbar = $true
+$appContext.MainForm = $form
 
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = 'Pembersih sampah Windows - aman, admin, dan tetap berjalan di tray'
@@ -363,6 +367,10 @@ function Send-AppToTray {
         [bool]$ShowBalloon = $true
     )
 
+    if (-not $script:hasCompletedInitialShow) {
+        return
+    }
+
     $notifyIcon.Visible = $true
     $form.Hide()
     $form.ShowInTaskbar = $false
@@ -385,10 +393,18 @@ function Exit-AppCompletely {
     $cleanupTimer.Stop()
     $notifyIcon.Visible = $false
     $notifyIcon.Dispose()
-    $form.Close()
+    if (-not $form.IsDisposed) {
+        $form.Close()
+        $form.Dispose()
+    }
+    $appContext.ExitThread()
 }
 
 function Handle-ResizeToTray {
+    if (-not $script:hasCompletedInitialShow) {
+        return
+    }
+
     if ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized) {
         Send-AppToTray -Reason 'Aplikasi diminimize dan tetap berjalan di tray.' -ShowBalloon $true
     }
@@ -444,16 +460,22 @@ $notifyIcon.Add_DoubleClick({ Restore-AppFromTray })
 $form.Add_Resize({ Handle-ResizeToTray })
 $form.Add_FormClosing({ param($sender, $eventArgs) Handle-UserCloseRequest -EventArgs $eventArgs })
 $form.Add_Shown({
+        $script:hasCompletedInitialShow = $true
+        $form.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+        $form.ShowInTaskbar = $true
+        $form.Activate()
         $notifyIcon.Visible = $true
         if ($autoCleanCheckBox.Checked) {
             $cleanupTimer.Start()
         }
         Update-NextRunLabel
-        Write-RuntimeMarker -Data ([pscustomobject]@{
-                Mode = 'GuiShown'
-                Success = $true
-                Administrator = $script:isAdministrator
-            })
+        if (-not $SmokeTestUi) {
+            Write-RuntimeMarker -Data ([pscustomobject]@{
+                    Mode = 'GuiShown'
+                    Success = $true
+                    Administrator = $script:isAdministrator
+                })
+        }
     })
 
 $form.Controls.AddRange(@(
@@ -472,52 +494,127 @@ $form.Controls.AddRange(@(
     ))
 
 if ($SmokeTestUi) {
-    $resizeStateBefore = $form.ShowInTaskbar
-    $notifyVisibleBefore = $notifyIcon.Visible
+    $script:smokeTestResult = [ordered]@{}
+    $script:hiddenWaitStart = $null
+    $script:closeWaitStart = $null
+    $stepTimer = New-Object System.Windows.Forms.Timer
+    $stepTimer.Interval = 500
+    $stepTimer.Tag = 0
 
-    Send-AppToTray -Reason 'Smoke test minimize.' -ShowBalloon $false
-    $minimizeState = [pscustomobject]@{
-        NotifyVisible = $notifyIcon.Visible
-        ShowInTaskbar = $form.ShowInTaskbar
-        FormVisible = $form.Visible
-    }
+    $stepTimer.Add_Tick({
+            try {
+                $currentStep = [int]$stepTimer.Tag
+                switch ($currentStep) {
+                    0 {
+                        $script:smokeTestResult.InitialShownState = [pscustomobject]@{
+                            NotifyVisible = $notifyIcon.Visible
+                            ShowInTaskbar = $form.ShowInTaskbar
+                            FormVisible = $form.Visible
+                            WindowState = $form.WindowState.ToString()
+                        }
 
-    Restore-AppFromTray
-    $restoreState = [pscustomobject]@{
-        NotifyVisible = $notifyIcon.Visible
-        ShowInTaskbar = $form.ShowInTaskbar
-        FormVisible = $form.Visible
-        WindowState = $form.WindowState.ToString()
-    }
+                        Send-AppToTray -Reason 'Smoke test minimize.' -ShowBalloon $false
+                        $script:hiddenWaitStart = Get-Date
+                        $stepTimer.Tag = 1
+                    }
+                    1 {
+                        $elapsed = [int]((Get-Date) - $script:hiddenWaitStart).TotalMilliseconds
+                        if ($elapsed -lt 5000) {
+                            return
+                        }
 
-    $closingArgs = New-Object System.Windows.Forms.FormClosingEventArgs([System.Windows.Forms.CloseReason]::UserClosing, $false)
-    Handle-UserCloseRequest -EventArgs $closingArgs
-    $closeState = [pscustomobject]@{
-        Cancelled = $closingArgs.Cancel
-        NotifyVisible = $notifyIcon.Visible
-        ShowInTaskbar = $form.ShowInTaskbar
-        FormVisible = $form.Visible
-    }
+                        $script:smokeTestResult.MinimizeToTrayState = [pscustomobject]@{
+                            NotifyVisible = $notifyIcon.Visible
+                            ShowInTaskbar = $form.ShowInTaskbar
+                            FormVisible = $form.Visible
+                            WindowState = $form.WindowState.ToString()
+                            WaitedMilliseconds = $elapsed
+                        }
 
-    $result = [pscustomobject]@{
-        InitialState = [pscustomobject]@{
-            NotifyVisible = $notifyVisibleBefore
-            ShowInTaskbar = $resizeStateBefore
-        }
-        MinimizeToTrayState = $minimizeState
-        RestoreState = $restoreState
-        CloseToTrayState = $closeState
-    }
+                        Restore-AppFromTray
+                        $stepTimer.Tag = 2
+                    }
+                    2 {
+                        $script:smokeTestResult.RestoreState = [pscustomobject]@{
+                            NotifyVisible = $notifyIcon.Visible
+                            ShowInTaskbar = $form.ShowInTaskbar
+                            FormVisible = $form.Visible
+                            WindowState = $form.WindowState.ToString()
+                        }
 
-    Write-RuntimeMarker -Data ([pscustomobject]@{
-            Mode = 'SmokeTestUi'
-            Success = $true
-            Result = $result
+                        $closingArgs = New-Object System.Windows.Forms.FormClosingEventArgs([System.Windows.Forms.CloseReason]::UserClosing, $false)
+                        Handle-UserCloseRequest -EventArgs $closingArgs
+                        $script:smokeTestResult.CloseInterceptState = [pscustomobject]@{
+                            Cancelled = $closingArgs.Cancel
+                            NotifyVisible = $notifyIcon.Visible
+                            ShowInTaskbar = $form.ShowInTaskbar
+                            FormVisible = $form.Visible
+                            WindowState = $form.WindowState.ToString()
+                        }
+
+                        $script:closeWaitStart = Get-Date
+                        $stepTimer.Tag = 3
+                    }
+                    3 {
+                        $elapsed = [int]((Get-Date) - $script:closeWaitStart).TotalMilliseconds
+                        if ($elapsed -lt 5000) {
+                            return
+                        }
+
+                        $script:smokeTestResult.CloseToTrayStableState = [pscustomobject]@{
+                            NotifyVisible = $notifyIcon.Visible
+                            ShowInTaskbar = $form.ShowInTaskbar
+                            FormVisible = $form.Visible
+                            WindowState = $form.WindowState.ToString()
+                            WaitedMilliseconds = $elapsed
+                        }
+
+                        $script:smokeTestResult.Success = $true
+                        $script:smokeTestResult = [pscustomobject]$script:smokeTestResult
+                        Write-RuntimeMarker -Data ([pscustomobject]@{
+                                Mode = 'SmokeTestUi'
+                                Success = $true
+                                Result = $script:smokeTestResult
+                            })
+
+                        $stepTimer.Stop()
+                        Exit-AppCompletely
+                    }
+                }
+            }
+            catch {
+                $stepTimer.Stop()
+                $script:smokeTestResult = [pscustomobject]@{
+                    Success = $false
+                    Error = $_.Exception.Message
+                }
+                Write-RuntimeMarker -Data ([pscustomobject]@{
+                        Mode = 'SmokeTestUi'
+                        Success = $false
+                        Error = $_.Exception.Message
+                    })
+                Exit-AppCompletely
+            }
         })
-    $result | ConvertTo-Json -Depth 8
-    $notifyIcon.Dispose()
-    $form.Dispose()
-    exit 0
+
+    $form.Add_Shown({
+            if (-not $stepTimer.Enabled) {
+                $stepTimer.Start()
+            }
+        })
 }
 
-[void]$form.ShowDialog()
+$form.Show()
+[System.Windows.Forms.Application]::Run($appContext)
+
+if ($SmokeTestUi) {
+    if ($null -eq $script:smokeTestResult) {
+        $script:smokeTestResult = [pscustomobject]@{
+            Success = $false
+            Error = 'Smoke test finished without producing a result.'
+        }
+    }
+
+    $script:smokeTestResult | ConvertTo-Json -Depth 8
+    exit 0
+}
