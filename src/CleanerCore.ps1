@@ -22,6 +22,7 @@ function Get-SafeCleanupTargets {
     $targets = New-Object System.Collections.Generic.List[object]
     $currentTemp = [System.IO.Path]::GetTempPath()
     $localAppData = $env:LOCALAPPDATA
+    $programData = $env:ProgramData
     $windowsDir = $env:WINDIR
 
     $targets.Add([pscustomobject]@{
@@ -72,9 +73,40 @@ function Get-SafeCleanupTargets {
             })
 
         $targets.Add([pscustomobject]@{
+                Name = 'File Prefetch Windows'
+                Kind = 'FilePattern'
+                Path = (Join-Path $windowsDir 'Prefetch')
+                Filter = '*.pf'
+                RequiresAdmin = $true
+            })
+
+        $targets.Add([pscustomobject]@{
                 Name = 'Sisa Windows Update'
                 Kind = 'DirectoryContents'
                 Path = (Join-Path $windowsDir 'SoftwareDistribution\Download')
+                RequiresAdmin = $true
+            })
+
+        $targets.Add([pscustomobject]@{
+                Name = 'Cache Delivery Optimization'
+                Kind = 'DirectoryContents'
+                Path = (Join-Path $windowsDir 'SoftwareDistribution\DeliveryOptimization\Cache')
+                RequiresAdmin = $true
+            })
+
+        $targets.Add([pscustomobject]@{
+                Name = 'Crash dump sistem Windows'
+                Kind = 'DirectoryContents'
+                Path = (Join-Path $windowsDir 'Minidump')
+                RequiresAdmin = $true
+            })
+    }
+
+    if ($programData) {
+        $targets.Add([pscustomobject]@{
+                Name = 'Windows Error Reporting queue'
+                Kind = 'DirectoryContents'
+                Path = (Join-Path $programData 'Microsoft\Windows\WER\ReportQueue')
                 RequiresAdmin = $true
             })
     }
@@ -128,8 +160,8 @@ function Remove-DirectoryContentsSafe {
         return (New-CleanupResult -Name $DisplayName -Status 'Skipped' -Message 'Folder tidak ditemukan.')
     }
 
-    $items = Get-ChildItem -LiteralPath $TargetPath -Force -ErrorAction SilentlyContinue
-    if (-not $items) {
+    $items = @(Get-ChildItem -LiteralPath $TargetPath -Force -ErrorAction SilentlyContinue)
+    if ($items.Count -eq 0) {
         return (New-CleanupResult -Name $DisplayName -Status 'Clean' -Message 'Tidak ada file yang perlu dibersihkan.')
     }
 
@@ -181,7 +213,7 @@ function Remove-FilePatternSafe {
     }
 
     $files = @(Get-ChildItem -LiteralPath $TargetPath -Filter $Filter -Force -File -ErrorAction SilentlyContinue)
-    if (-not $files) {
+    if ($files.Count -eq 0) {
         return (New-CleanupResult -Name $DisplayName -Status 'Clean' -Message 'Tidak ada file yang cocok untuk dibersihkan.')
     }
 
