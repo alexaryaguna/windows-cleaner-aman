@@ -1,6 +1,6 @@
 # Windows Cleaner Aman
 
-Windows Cleaner Aman adalah aplikasi pembersih sampah Windows yang dibuat agar mudah dipakai oleh orang awam. Aplikasi ini berjalan dengan satu klik, membersihkan file-file sementara yang aman untuk dibuang, lalu dapat mengulang pembersihan otomatis setiap 30 menit selama aplikasinya masih terbuka.
+Windows Cleaner Aman adalah aplikasi pembersih sampah Windows yang dibuat agar mudah dipakai oleh orang awam. Aplikasi ini berjalan dengan satu klik, memaksa mode Administrator saat dibuka normal, membersihkan file-file sementara yang aman untuk dibuang, lalu tetap berjalan di tray sambil mengulang pembersihan otomatis setiap 30 menit.
 
 ## Cocok untuk
 
@@ -10,11 +10,12 @@ Windows Cleaner Aman adalah aplikasi pembersih sampah Windows yang dibuat agar m
 
 ## Fitur utama
 
-- **One click cleaning**: cukup jalankan `Run Cleaner.cmd`, lalu klik **Bersihkan Sekarang**.
-- **Loop otomatis 30 menit**: bila opsi auto-clean aktif, aplikasi akan membersihkan ulang setiap 30 menit selama jendela aplikasi tetap terbuka.
+- **One click cleaning tanpa terminal terbuka**: cukup jalankan `Run Cleaner.vbs` atau `Run Cleaner.cmd`. Terminal CMD tidak akan tetap tampil saat aplikasi berjalan.
+- **Paksa Administrator saat dibuka normal**: aplikasi meminta hak Administrator agar target sistem Windows juga bisa dibersihkan.
+- **Loop otomatis 30 menit**: selama aplikasi masih berjalan, pembersihan otomatis tetap aktif setiap 30 menit.
+- **Minimize dan close ke tray**: saat di-minimize atau jendelanya ditutup, aplikasi tidak mati. Aplikasi berpindah ke tray dan tetap berjalan.
 - **Aman untuk file pribadi**: aplikasi **tidak** menghapus `Documents`, `Downloads`, `Desktop`, atau file pribadi lain.
 - **Laporan hasil pembersihan**: aplikasi menampilkan apa saja yang berhasil dibersihkan, apa yang dilewati, dan perkiraan ruang yang berhasil dikosongkan.
-- **Mode Administrator opsional**: bila dijalankan dengan **Run as Administrator**, aplikasi juga mencoba membersihkan target sistem seperti `C:\Windows\Temp` dan sisa unduhan Windows Update.
 
 ## Yang dibersihkan
 
@@ -26,32 +27,40 @@ Secara default, aplikasi membersihkan target aman berikut:
 - crash dump lokal
 - folder diagnostik lokal
 - Recycle Bin
-- `C:\Windows\Temp` *(jika dijalankan sebagai Administrator)*
-- `C:\Windows\SoftwareDistribution\Download` *(jika dijalankan sebagai Administrator)*
+- `C:\Windows\Temp`
+- `C:\Windows\Prefetch` *(hanya file `*.pf`, bukan semua isi folder secara membabi buta)*
+- `C:\Windows\SoftwareDistribution\Download`
+- `C:\Windows\SoftwareDistribution\DeliveryOptimization\Cache`
+- `C:\Windows\Minidump`
+- `C:\ProgramData\Microsoft\Windows\WER\ReportQueue`
 
 ## Cara pakai
 
 1. Buka folder aplikasi.
-2. Klik dua kali `Run Cleaner.cmd`.
-3. Klik tombol **Bersihkan Sekarang**.
-4. Jika ingin pembersihan berulang, biarkan centang auto-clean tetap aktif dan biarkan aplikasinya tetap terbuka.
+2. Klik dua kali `Run Cleaner.vbs`.
+3. Izinkan permintaan Administrator jika Windows memintanya.
+4. Klik tombol **Bersihkan Sekarang**.
+5. Jika ingin aplikasi terus berjaga, cukup minimize atau tutup jendelanya. Aplikasi akan pindah ke tray dan tetap berjalan.
 
-## Jika ingin hasil lebih maksimal
+## Cara membuka lagi dari tray
 
-- Jalankan `Run Cleaner.cmd` dengan **Run as Administrator** agar target sistem juga bisa dibersihkan.
-- Tutup aplikasi yang sedang sibuk memakai file cache tertentu agar lebih banyak file bisa dihapus.
+- Cari ikon **Windows Cleaner Aman** di area tray Windows.
+- Klik dua kali ikon tray untuk membuka jendela lagi.
+- Anda juga bisa klik kanan tray icon untuk membuka aplikasi, menjalankan pembersihan, atau keluar sepenuhnya.
 
 ## Catatan penting
 
 - Beberapa file mungkin sedang dipakai Windows atau aplikasi lain. File seperti itu akan **dilewati dengan aman**, bukan dipaksa hapus.
+- Folder sistem dibersihkan memakai **allowlist target aman**, bukan penghapusan liar ke seluruh `C:\Windows`.
 - Aplikasi ini dirancang untuk **pembersihan aman**, bukan pembersihan agresif yang berisiko menghapus data penting.
 
 ## Struktur file
 
-- `Run Cleaner.cmd` → launcher satu klik
-- `src\WindowsCleaner.ps1` → aplikasi utama dengan tampilan GUI
-- `src\CleanerCore.ps1` → logika pembersihan
-- `tests\Validate-Cleaner.ps1` → validasi parser dan self-test
+- `Run Cleaner.vbs` → launcher utama tersembunyi
+- `Run Cleaner.cmd` → wrapper launcher kompatibilitas
+- `src\WindowsCleaner.ps1` → aplikasi utama dengan GUI, tray, dan auto-elevation
+- `src\CleanerCore.ps1` → logika pembersihan dan allowlist target
+- `tests\Validate-Cleaner.ps1` → validasi parser, launcher, tray behavior, dan self-test
 
 ## Cara uji
 
@@ -61,4 +70,4 @@ Jalankan perintah berikut di Windows PowerShell:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Validate-Cleaner.ps1
 ```
 
-Jika berhasil, Anda akan melihat pesan bahwa parser validation dan self-test selesai dengan sukses.
+Jika berhasil, Anda akan melihat bahwa parser validation, hidden launcher test, tray smoke test, dan self-test selesai dengan sukses.
