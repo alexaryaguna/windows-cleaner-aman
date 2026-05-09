@@ -129,8 +129,8 @@ if (-not $uiSmoke.MinimizeToTrayState.NotifyVisible -or $uiSmoke.MinimizeToTrayS
     throw 'Minimize-to-tray behavior did not produce the expected tray state.'
 }
 
-if (-not $uiSmoke.RestoreState.FormVisible -or -not $uiSmoke.RestoreState.ShowInTaskbar) {
-    throw 'Restore-from-tray behavior did not restore the form correctly.'
+if (-not $uiSmoke.TrayDoubleClickRestoreState.FormVisible -or -not $uiSmoke.TrayDoubleClickRestoreState.ShowInTaskbar -or $uiSmoke.TrayDoubleClickRestoreState.WindowState -ne 'Normal') {
+    throw 'Tray double-click restore behavior did not restore the form correctly.'
 }
 
 if (-not $uiSmoke.CloseInterceptState.Cancelled -or -not $uiSmoke.CloseInterceptState.NotifyVisible) {
@@ -156,6 +156,10 @@ if (-not $vbsUiMarker.Success -or $vbsUiMarker.Mode -ne 'SmokeTestUi') {
 $vbsUi = $vbsUiMarker.Result
 if (-not $vbsUi.InitialShownState.FormVisible -or -not $vbsUi.InitialShownState.ShowInTaskbar) {
     throw 'Hidden VBS launcher did not show the main window first.'
+}
+
+if (-not $vbsUi.TrayDoubleClickRestoreState.FormVisible -or -not $vbsUi.TrayDoubleClickRestoreState.ShowInTaskbar) {
+    throw 'Hidden VBS launcher did not restore the window from tray double-click behavior.'
 }
 
 if (-not $vbsUi.CloseToTrayStableState.NotifyVisible -or $vbsUi.CloseToTrayStableState.WaitedMilliseconds -lt 5000) {

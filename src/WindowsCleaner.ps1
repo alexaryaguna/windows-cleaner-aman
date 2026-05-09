@@ -385,7 +385,12 @@ function Restore-AppFromTray {
     $form.ShowInTaskbar = $true
     $form.WindowState = [System.Windows.Forms.FormWindowState]::Normal
     $form.Show()
+    $form.BringToFront()
     $form.Activate()
+}
+
+function Handle-TrayIconActivation {
+    Restore-AppFromTray
 }
 
 function Exit-AppCompletely {
@@ -453,10 +458,11 @@ $autoCleanCheckBox.Add_CheckedChanged({
 
 $runButton.Add_Click({ Invoke-AndRenderCleanup })
 $cleanupTimer.Add_Tick({ Invoke-AndRenderCleanup })
-$openMenuItem.add_Click({ Restore-AppFromTray })
+$openMenuItem.add_Click({ Handle-TrayIconActivation })
 $cleanNowMenuItem.add_Click({ Invoke-AndRenderCleanup })
 $exitMenuItem.add_Click({ Exit-AppCompletely })
-$notifyIcon.Add_DoubleClick({ Restore-AppFromTray })
+$notifyIcon.Add_DoubleClick({ Handle-TrayIconActivation })
+$notifyIcon.Add_MouseDoubleClick({ param($sender, $eventArgs) Handle-TrayIconActivation })
 $form.Add_Resize({ Handle-ResizeToTray })
 $form.Add_FormClosing({ param($sender, $eventArgs) Handle-UserCloseRequest -EventArgs $eventArgs })
 $form.Add_Shown({
@@ -531,11 +537,11 @@ if ($SmokeTestUi) {
                             WaitedMilliseconds = $elapsed
                         }
 
-                        Restore-AppFromTray
+                        Handle-TrayIconActivation
                         $stepTimer.Tag = 2
                     }
                     2 {
-                        $script:smokeTestResult.RestoreState = [pscustomobject]@{
+                        $script:smokeTestResult.TrayDoubleClickRestoreState = [pscustomobject]@{
                             NotifyVisible = $notifyIcon.Visible
                             ShowInTaskbar = $form.ShowInTaskbar
                             FormVisible = $form.Visible
